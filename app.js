@@ -62,7 +62,7 @@ app.post('/planet',  async function(req, res) {
     //         res.send(planetData);
     //     }
     // })
-});
+// });
 
 app.get('/',   async (req, res) => {
     res.sendFile(path.join(__dirname, '/', 'index.html'));
