@@ -15,10 +15,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
         - name: Checkout Repository
-          uses: |
-           actions/checkout@v4
-           run echo '${{MONGO_USERNAME}}'
-           run echc  '${{MONGO_PASSWORD}}'
+          uses: actions/checkout@v4
 
         - name: Setup NodeJS  Version
           uses: actions/setup-node@v3
