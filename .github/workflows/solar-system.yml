@@ -6,7 +6,12 @@ on:
     branches:
       - main
       - 'feature/*'
-    
+env:
+  MONGO_URI: 'mongodb+srv://cluster0.dqmuih9.mongodb.net/test'
+  MONGO_USERNAME: ${{vars.MONGO_USERNAME}}
+  MONGO_PASSWORD: ${{secrets.MONGO_PASSWORD}}
+      
+
 jobs:
     unit-testing:
         name: Unit Testing
