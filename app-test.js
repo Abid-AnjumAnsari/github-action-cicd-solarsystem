@@ -15,8 +15,8 @@ describe('Planets API Suite', () => {
             let payload = {
                 id: 1
             }
-            return chai.request(server)
-          chai.request(server)
+        
+        return chai.request(server)
               .post('/planet')
               .send(payload)
               .then((res) => {
