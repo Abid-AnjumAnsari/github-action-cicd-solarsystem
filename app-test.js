@@ -15,13 +15,14 @@ describe('Planets API Suite', () => {
             let payload = {
                 id: 1
             }
+            return chai.request(server)
           chai.request(server)
               .post('/planet')
               .send(payload)
               .then((res) => {
                     res.should.have.status(200);
                     res.body.should.have.property('id').eql(1);
-                    res.body.should.have.property('name').eql('Mercury-ERRORRRRRRRrrr');
+                    res.body.should.have.property('name').eql('Mercury- ERRORRRRRRRrrr');
                 
               });
         });
