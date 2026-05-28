@@ -41,7 +41,7 @@ jobs:
          
           
         - name: Archive Test Result
-          if: steps.nodejs-unit-testing.outcome == 'failure' || steps.nodejs-unit-testing.outcome == 'success'
+          if: failure() && (steps.nodejs-unit-testing.outcome == 'failure' || steps.nodejs-unit-testing.outcome == 'success')
           uses: actions/upload-artifact@v7
           with:
             name: Mocha-Test-Result
