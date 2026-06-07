@@ -22,3 +22,4 @@ spec:
     - hosts:
       - solar-system-_{_NAMESPACE_}_._{_INGRESS_IP_}_.nip.io
       secretName: ingress-local-tls
+      
