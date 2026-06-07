@@ -193,3 +193,4 @@ jobs:
          kubectl version --short
          echo '---------------------------------'
          kubectl get nodes
+         
