@@ -11,7 +11,7 @@ env:
   MONGO_URI: 'mongodb+srv://${{vars.MONGO_USERNAME}}:${{secrets.MONGO_PASSWORD}}@cluster0.dqmuih9.mongodb.net/test?retryWrites=true&w=majority'
   MONGO_USERNAME: ${{ vars.MONGO_USERNAME }}
   MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
-  
+
 jobs:
   unit-testing:
     name: Unit Testing
@@ -229,4 +229,4 @@ jobs:
 
      - name: Deploy to Dev Environment
        run: |
-          kubectl apply -f kubernetes/development
+          kubectl apply -f kubernetes/development 
