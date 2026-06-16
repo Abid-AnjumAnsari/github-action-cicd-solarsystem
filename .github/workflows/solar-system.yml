@@ -240,8 +240,8 @@ jobs:
             get ingress -o jsonpath='{.items[0].spec.tls[0].hosts[0]}')
           echo "APP_INGRESS_URL=$HOST" >> "$GITHUB_OUTPUT"
 
-       outputs:
-        APP_INGRESS_URL: ${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
+   outputs:
+      APP_INGRESS_URL: ${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
   
   integration-testing:
     name: Dev Integration Testing
