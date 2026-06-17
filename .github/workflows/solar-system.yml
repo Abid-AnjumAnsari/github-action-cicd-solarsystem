@@ -328,7 +328,7 @@ jobs:
 
   integration-testing:
     name: Dev Integration Testing
-    needs: run-seeder
+    needs: [run-seeder, dev-deploy]
     runs-on: ubuntu-latest
     steps:
       - name: Test `/live` Endpoint
