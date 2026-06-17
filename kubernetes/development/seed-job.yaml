@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: solar-system-seed
+  namespace: development
+spec:
+  template:
+    spec:
+      containers:
+        - name: seeder
+          image: abidanjumansari/solar-system:${IMAGE_TAG}
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: mongo-db-creds
+          command: ["sh", "-c"]
+          args:
+            - npm run seed
+      restartPolicy: Never
+  backoffLimit: 1

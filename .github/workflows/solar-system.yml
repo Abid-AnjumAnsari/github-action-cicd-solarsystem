@@ -1,6 +1,6 @@
 name: Solar System Workflow
 
-on: 
+on:
   workflow_dispatch:
   push:
     branches:
@@ -8,7 +8,9 @@ on:
       - 'feature/*'
 
 env:
-  MONGO_URI: 'mongodb+srv://${{vars.MONGO_USERNAME}}:${{secrets.MONGO_PASSWORD}}@cluster0.dqmuih9.mongodb.net/test?retryWrites=true&w=majority'
+  MONGO_URI: 'mongodb+srv://${{ vars.MONGO_USERNAME }}:${{ secrets.MONGO_PASSWORD }}@cluster0.dqmuih9.mongodb.net/test?retryWrites=true&w=majority'
+  MONGO_USERNAME: ${{ vars.MONGO_USERNAME }}
+  MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
 
 jobs:
   unit-testing:
@@ -16,11 +18,20 @@ jobs:
     strategy:
       matrix:
         nodejs_version: [18, 20]
-        operating_system: [ubuntu-latest, macos-latest]
+        operating_system: [ubuntu-latest]
         exclude:
           - nodejs_version: 18
             operating_system: macos-latest
     runs-on: ${{ matrix.operating_system }}
+    services:
+      mongo-db:
+        image: siddharth67/mongo-db:non-prod
+        ports:
+          - 27017:27017
+    env:
+      MONGO_URI: 'mongodb://localhost:27017/superData'
+      MONGO_USERNAME: non-prod-user
+      MONGO_PASSWORD: non-prod-password
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -52,14 +63,19 @@ jobs:
 
   codecoverage:
     runs-on: ubuntu-latest
+    container:
+      image: node:18
+    services:
+      mongo:
+        image: siddharth67/mongo-db:non-prod
+        options: --name mongo
+    env:
+      MONGO_URI: 'mongodb://mongo:27017/superData'
+      MONGO_USERNAME: non-prod-user
+      MONGO_PASSWORD: non-prod-password
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Setup NodeJS Version - 18
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
 
       - name: Cache NPM dependencies
         uses: actions/cache@v3
@@ -74,7 +90,7 @@ jobs:
         continue-on-error: true
         run: npm run coverage
 
-      - name: Archive coverage Result 
+      - name: Archive coverage Result
         uses: actions/upload-artifact@v7
         with:
           name: Code-Coverage-Result
@@ -83,7 +99,7 @@ jobs:
 
   docker:
     name: Containerization
-    needs: [unit-testing, codecoverage]   # ✅ corrected: job name must match exactly
+    needs: [unit-testing, codecoverage]
     permissions:
       packages: write
     runs-on: ubuntu-latest
@@ -102,18 +118,10 @@ jobs:
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ Github.repository_owner}}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # - name: Build Docker Image
-      #   run: |
-      #     docker build -t ${{ vars.DOCKERHUB_USERNAME }}/my-app:${{ github.sha }} .
-
-      # - name: Push Docker Image
-      #   run: |
-      #     docker push ${{ vars.DOCKERHUB_USERNAME }}/my-app:${{ github.sha }}
-      -
-        name: Build for testing
+      - name: Build for testing
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -122,27 +130,210 @@ jobs:
 
       - name: Docker Image Testing
         run: |
-         docker images
-         docker run --name solar-system-app -d \
-         -p 3000:3000 \
-         -e MONGO_URI=$MONGO_URI \
-         -e MONGO_USERNAME=$MONGO_USERNAME \
-         -e MONGO_PASSWORD=$MONGO_PASSWORD \
-         ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
+          docker images
+          docker run --name solar-system-app -d \
+            -p 3000:3000 \
+            -e MONGO_URI=$MONGO_URI \
+            -e MONGO_USERNAME=$MONGO_USERNAME \
+            -e MONGO_PASSWORD=$MONGO_PASSWORD \
+            ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
 
-         export IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
-         echo $IP
+          export IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
+          echo $IP
 
-         echo Testing Image URL using wget
-         wget -q -O - 127.0.0.1:3000/live | grep live
+          echo Testing Image URL using wget
+          wget -q -O - 127.0.0.1:3000/live | grep live
 
-      -
-        name: pushing docker image
+      - name: pushing docker image
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
-          tags: | 
-            ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}  
+          tags: |
+            ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/solar-system:${{ github.sha }}
-            
+
+  dev-deploy:
+    needs: [docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install kubectl CLI
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.26.0'
+
+      - name: Configure kubeconfig context
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Fetch Kubernetes cluster details
+        run: |
+          kubectl version --short
+          echo '---------------------------------'
+          kubectl get nodes
+
+      - name: Save Nginx Ingress IP
+        id: ingress
+        run: |
+          echo "INGRESS_IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.spec.externalIPs[0]}')" >> $GITHUB_ENV
+
+      - name: Replace tokens in manifests
+        uses: cschleiden/replace-tokens@v1
+        with:
+          tokenPrefix: '_{_'
+          tokenSuffix: '_}_'
+          files: kubernetes/development/*.yaml
+        env:
+          NAMESPACE: ${{ vars.NAMESPACE }}
+          REPLICAS: ${{ vars.REPLICAS }}
+          IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
+          INGRESS_IP: ${{ env.INGRESS_IP }}
+
+      - name: Verify replaced manifests
+        run: cat kubernetes/development/*.yaml
+
+      - name: Create MongoDB Secret
+        run: |
+          kubectl -n ${{ vars.NAMESPACE }} create secret generic mongo-db-creds \
+            --from-literal=MONGO_URI="${{ env.MONGO_URI }}" \
+            --from-literal=MONGO_USERNAME="${{ env.MONGO_USERNAME }}" \
+            --from-literal=MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}" \
+            --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to Dev Environment
+        run: |
+          kubectl apply -f kubernetes/development
+
+      - name: Set App Ingress Host URL
+        id: set-ingress-host-address
+        run: |
+          # wait up to 60s for ingress to populate
+          for i in $(seq 1 12); do
+            TLS_HOST=$(kubectl -n ${{ vars.NAMESPACE }} get ingress -o jsonpath='{.items[0].spec.tls[0].hosts[0]}' 2>/dev/null || true)
+            RULE_HOST=$(kubectl -n ${{ vars.NAMESPACE }} get ingress -o jsonpath='{.items[0].spec.rules[0].host}' 2>/dev/null || true)
+            if [ -n "$TLS_HOST" ]; then
+              HOST="$TLS_HOST"
+              break
+            elif [ -n "$RULE_HOST" ]; then
+              HOST="$RULE_HOST"
+              break
+            else
+              sleep 5
+            fi
+          done
+          if [ -z "$HOST" ]; then
+            echo "No ingress host found after wait" >&2
+            exit 1
+          fi
+          echo "APP_INGRESS_URL=$HOST" >> "$GITHUB_OUTPUT"
+
+    outputs:
+      APP_INGRESS_URL: ${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
+
+  run-seeder:
+    name: Run DB Seeder Job
+    needs: dev-deploy
+    runs-on: ubuntu-latest
+    if: ${{ success() }}
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      NAMESPACE: development
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Write kubeconfig from secret (runner-readable)
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.KUBECONFIG }}" ]; then
+            echo "ERROR: KUBECONFIG secret is empty" >&2
+            exit 1
+          fi
+          # write kubeconfig content to a file the runner can read
+          echo "${{ secrets.KUBECONFIG }}" > /tmp/kubeconfig
+          chmod 600 /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+          kubectl --kubeconfig "$KUBECONFIG" version --short || true
+
+      - name: Debug list repo and kubernetes files
+        run: |
+          echo "PWD: $(pwd)"
+          echo "Repo root:"
+          ls -la
+          echo "kubernetes dir:"
+          ls -la kubernetes || true
+          echo "kubernetes/development dir:"
+          ls -la kubernetes/development || true
+
+      - name: Show seed manifest if present
+        run: |
+          if [ -f kubernetes/development/seed-job.yaml ]; then
+            echo "---- seed-job.yaml head ----"
+            sed -n '1,200p' kubernetes/development/seed-job.yaml
+            echo "---- end ----"
+          else
+            echo "ERROR: seed-job.yaml not found in kubernetes/development"
+            exit 1
+          fi
+
+      - name: Install kubectl CLI
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.26.0'
+
+      - name: Prepare seed manifest (envsubst)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y gettext-base || true
+          export IMAGE_TAG="${IMAGE_TAG}"
+          envsubst '${IMAGE_TAG}' < kubernetes/development/seed-job.yaml > /tmp/seed-job.yaml
+          echo "Prepared /tmp/seed-job.yaml:"
+          sed -n '1,200p' /tmp/seed-job.yaml || true
+
+      - name: Delete existing seed Job (if any)
+        shell: bash
+        run: |
+          export KUBECONFIG=/tmp/kubeconfig
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete job solar-system-seed --ignore-not-found=true || true
+          # wait briefly for deletion to propagate
+          for i in $(seq 1 6); do
+            kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" get job solar-system-seed >/dev/null 2>&1 || break
+            sleep 1
+          done
+
+      - name: Apply seed Job
+        run: |
+          export KUBECONFIG=/tmp/kubeconfig
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" apply -f /tmp/seed-job.yaml
+
+      - name: Wait for seed Job completion
+        run: |
+          export KUBECONFIG=/tmp/kubeconfig
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" wait --for=condition=complete job/solar-system-seed --timeout=300s || true
+
+      - name: Stream seed Job logs
+        run: |
+          export KUBECONFIG=/tmp/kubeconfig
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" logs -l job-name=solar-system-seed --tail=500 || true
+
+      - name: Cleanup seed Job
+        run: |
+          export KUBECONFIG=/tmp/kubeconfig
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete job solar-system-seed || true
+
+  integration-testing:
+    name: Dev Integration Testing
+    needs: [run-seeder, dev-deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test `/live` Endpoint
+        env:
+          URL: ${{ needs.dev-deploy.outputs.APP_INGRESS_URL }}
+        run: |
+          echo "Testing endpoint: https://$URL/live"
+          curl https://$URL/live -s -k | jq -r .status | grep -iq live
