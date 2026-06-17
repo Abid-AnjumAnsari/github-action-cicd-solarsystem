@@ -248,7 +248,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Debug: list repo and kubernetes files
+      - name: Debug list repo and kubernetes files
         run: |
           echo "PWD: $(pwd)"
           echo "Repo root:"
