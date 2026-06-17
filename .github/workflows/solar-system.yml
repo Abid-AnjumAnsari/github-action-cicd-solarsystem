@@ -235,9 +235,60 @@ jobs:
     outputs:
       APP_INGRESS_URL: ${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
 
+  run-seeder:
+    name: Run DB Seeder Job
+    needs: dev-deploy
+    runs-on: ubuntu-latest
+    if: ${{ success() }}
+    env:
+      KUBECONFIG: ${{ secrets.KUBECONFIG }}
+      IMAGE_TAG: ${{ github.sha }}
+      NAMESPACE: development
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install kubectl CLI
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.26.0'
+
+      - name: Configure kubeconfig context
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Verify cluster access
+        run: |
+          kubectl version --short
+          kubectl -n $NAMESPACE get nodes || true
+
+      - name: Inject image tag into seed job manifest
+        run: |
+          sed "s|\${IMAGE_TAG}|${IMAGE_TAG}|g" kubernetes/development/seed-job.yaml > /tmp/seed-job.yaml
+          echo "---- /tmp/seed-job.yaml ----"
+          sed -n '1,200p' /tmp/seed-job.yaml
+
+      - name: Apply seed Job
+        run: |
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" apply -f /tmp/seed-job.yaml
+
+      - name: Wait for seed Job completion
+        run: |
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" wait --for=condition=complete job/solar-system-seed --timeout=300s
+
+      - name: Stream seed Job logs
+        run: |
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" logs -l job-name=solar-system-seed --tail=500
+
+      - name: Cleanup seed Job
+        run: |
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete job solar-system-seed || true
+
   integration-testing:
     name: Dev Integration Testing
-    needs: dev-deploy
+    needs: run-seeder
     runs-on: ubuntu-latest
     steps:
       - name: Test `/live` Endpoint
