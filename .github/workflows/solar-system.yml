@@ -248,24 +248,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Debug: show repo root and kubernetes/development
+      - name: Debug: list repo and kubernetes files
         run: |
-          echo "Working dir: $(pwd)"
-          echo "List repo root:"
+          echo "PWD: $(pwd)"
+          echo "Repo root:"
           ls -la
-          echo "List kubernetes directory (if present):"
+          echo "kubernetes dir:"
           ls -la kubernetes || true
-          echo "List kubernetes/development (if present):"
+          echo "kubernetes/development dir:"
           ls -la kubernetes/development || true
 
-      - name: Show seed manifest (if present)
+      - name: Show seed manifest if present
         run: |
           if [ -f kubernetes/development/seed-job.yaml ]; then
-            echo "---- seed-job.yaml (head) ----"
+            echo "---- seed-job.yaml head ----"
             sed -n '1,200p' kubernetes/development/seed-job.yaml
             echo "---- end ----"
           else
-            echo "seed-job.yaml not found in kubernetes/development"
+            echo "ERROR: seed-job.yaml not found in kubernetes/development"
             exit 1
           fi
 
@@ -280,7 +280,7 @@ jobs:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBECONFIG }}
 
-      - name: Prepare seed manifest with IMAGE_TAG (envsubst)
+      - name: Prepare seed manifest (envsubst)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y gettext-base || true
