@@ -1,6 +1,6 @@
 name: Solar System Workflow
 
-on: 
+on:
   workflow_dispatch:
   push:
     branches:
@@ -8,7 +8,7 @@ on:
       - 'feature/*'
 
 env:
-  MONGO_URI: 'mongodb+srv://${{vars.MONGO_USERNAME}}:${{secrets.MONGO_PASSWORD}}@cluster0.dqmuih9.mongodb.net/test?retryWrites=true&w=majority'
+  MONGO_URI: 'mongodb+srv://${{ vars.MONGO_USERNAME }}:${{ secrets.MONGO_PASSWORD }}@cluster0.dqmuih9.mongodb.net/test?retryWrites=true&w=majority'
   MONGO_USERNAME: ${{ vars.MONGO_USERNAME }}
   MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
 
@@ -28,15 +28,10 @@ jobs:
         image: siddharth67/mongo-db:non-prod
         ports:
           - 27017:27017
-
     env:
       MONGO_URI: 'mongodb://localhost:27017/superData'
       MONGO_USERNAME: non-prod-user
       MONGO_PASSWORD: non-prod-password
-
-
-
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -82,11 +77,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # - name: Setup NodeJS Version - 18
-      #   uses: actions/setup-node@v3
-      #   with:
-      #     node-version: 18
-
       - name: Cache NPM dependencies
         uses: actions/cache@v3
         with:
@@ -100,7 +90,7 @@ jobs:
         continue-on-error: true
         run: npm run coverage
 
-      - name: Archive coverage Result 
+      - name: Archive coverage Result
         uses: actions/upload-artifact@v7
         with:
           name: Code-Coverage-Result
@@ -109,7 +99,7 @@ jobs:
 
   docker:
     name: Containerization
-    needs: [unit-testing, codecoverage]   # ✅ corrected: job name must match exactly
+    needs: [unit-testing, codecoverage]
     permissions:
       packages: write
     runs-on: ubuntu-latest
@@ -128,18 +118,10 @@ jobs:
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ Github.repository_owner}}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # - name: Build Docker Image
-      #   run: |
-      #     docker build -t ${{ vars.DOCKERHUB_USERNAME }}/my-app:${{ github.sha }} .
-
-      # - name: Push Docker Image
-      #   run: |
-      #     docker push ${{ vars.DOCKERHUB_USERNAME }}/my-app:${{ github.sha }}
-      -
-        name: Build for testing
+      - name: Build for testing
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -148,31 +130,30 @@ jobs:
 
       - name: Docker Image Testing
         run: |
-         docker images
-         docker run --name solar-system-app -d \
-         -p 3000:3000 \
-         -e MONGO_URI=$MONGO_URI \
-         -e MONGO_USERNAME=$MONGO_USERNAME \
-         -e MONGO_PASSWORD=$MONGO_PASSWORD \
-         ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
+          docker images
+          docker run --name solar-system-app -d \
+            -p 3000:3000 \
+            -e MONGO_URI=$MONGO_URI \
+            -e MONGO_USERNAME=$MONGO_USERNAME \
+            -e MONGO_PASSWORD=$MONGO_PASSWORD \
+            ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
 
-         export IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
-         echo $IP
+          export IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
+          echo $IP
 
-         echo Testing Image URL using wget
-         wget -q -O - 127.0.0.1:3000/live | grep live
+          echo Testing Image URL using wget
+          wget -q -O - 127.0.0.1:3000/live | grep live
 
-      -
-        name: pushing docker image
+      - name: pushing docker image
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
-          tags: | 
-            ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}  
+          tags: |
+            ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/solar-system:${{ github.sha }}
 
-    dev-deploy:
+  dev-deploy:
     needs: [docker]
     runs-on: ubuntu-latest
     steps:
@@ -199,8 +180,7 @@ jobs:
       - name: Save Nginx Ingress IP
         id: ingress
         run: |
-          echo "INGRESS_IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
-            -o jsonpath='{.spec.externalIPs[0]}')" >> $GITHUB_ENV
+          echo "INGRESS_IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.spec.externalIPs[0]}')" >> $GITHUB_ENV
 
       - name: Replace tokens in manifests
         uses: cschleiden/replace-tokens@v1
@@ -255,7 +235,6 @@ jobs:
     outputs:
       APP_INGRESS_URL: ${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
 
-  
   integration-testing:
     name: Dev Integration Testing
     needs: dev-deploy
@@ -266,4 +245,4 @@ jobs:
           URL: ${{ needs.dev-deploy.outputs.APP_INGRESS_URL }}
         run: |
           echo "Testing endpoint: https://$URL/live"
-          curl https://$URL/live -s -k | jq -r .status | grep -iq live  
+          curl https://$URL/live -s -k | jq -r .status | grep -iq live
