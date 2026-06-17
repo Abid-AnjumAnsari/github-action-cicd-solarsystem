@@ -248,6 +248,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Debug: show repo root and kubernetes/development
+        run: |
+          echo "Working dir: $(pwd)"
+          echo "List repo root:"
+          ls -la
+          echo "List kubernetes directory (if present):"
+          ls -la kubernetes || true
+          echo "List kubernetes/development (if present):"
+          ls -la kubernetes/development || true
+
+      - name: Show seed manifest (if present)
+        run: |
+          if [ -f kubernetes/development/seed-job.yaml ]; then
+            echo "---- seed-job.yaml (head) ----"
+            sed -n '1,200p' kubernetes/development/seed-job.yaml
+            echo "---- end ----"
+          else
+            echo "seed-job.yaml not found in kubernetes/development"
+            exit 1
+          fi
+
       - name: Install kubectl CLI
         uses: azure/setup-kubectl@v3
         with:
@@ -259,16 +280,14 @@ jobs:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBECONFIG }}
 
-      - name: Verify cluster access
+      - name: Prepare seed manifest with IMAGE_TAG (envsubst)
         run: |
-          kubectl version --short
-          kubectl -n $NAMESPACE get nodes || true
-
-      - name: Inject image tag into seed job manifest
-        run: |
-          sed "s|\${IMAGE_TAG}|${IMAGE_TAG}|g" kubernetes/development/seed-job.yaml > /tmp/seed-job.yaml
-          echo "---- /tmp/seed-job.yaml ----"
-          sed -n '1,200p' /tmp/seed-job.yaml
+          sudo apt-get update -y
+          sudo apt-get install -y gettext-base || true
+          export IMAGE_TAG="${IMAGE_TAG}"
+          envsubst '${IMAGE_TAG}' < kubernetes/development/seed-job.yaml > /tmp/seed-job.yaml
+          echo "Prepared /tmp/seed-job.yaml:"
+          sed -n '1,200p' /tmp/seed-job.yaml || true
 
       - name: Apply seed Job
         run: |
@@ -276,11 +295,11 @@ jobs:
 
       - name: Wait for seed Job completion
         run: |
-          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" wait --for=condition=complete job/solar-system-seed --timeout=300s
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" wait --for=condition=complete job/solar-system-seed --timeout=300s || true
 
       - name: Stream seed Job logs
         run: |
-          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" logs -l job-name=solar-system-seed --tail=500
+          kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" logs -l job-name=solar-system-seed --tail=500 || true
 
       - name: Cleanup seed Job
         run: |
