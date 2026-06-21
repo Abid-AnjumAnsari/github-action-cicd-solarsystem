@@ -154,6 +154,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/solar-system:${{ github.sha }}
 
   dev-deploy:
+    if: contains(github.ref, 'feature/')
     needs: [docker]
     environment:
       name: development
@@ -331,6 +332,7 @@ jobs:
 
   dev-integration-testing:
     name: Dev Integration Testing
+    if: contains(github.ref, 'feature/')
     needs: [run-seeder, dev-deploy]
     runs-on: ubuntu-latest
     steps:
@@ -342,7 +344,8 @@ jobs:
           curl https://$URL/live -s -k | jq -r .status | grep -iq live
 
   prod-deploy:
-    needs: [dev-integration-testing]
+    if: github.ref == 'refs/heads/main'
+    needs: [docker]
     environment:
       name: production
       url: https://${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
@@ -428,6 +431,7 @@ jobs:
 
   prod-integration-testing:
     name: Prod Integration Testing
+    if: github.ref == 'refs/heads/main'
     needs: prod-deploy
     runs-on: ubuntu-latest
     steps:
