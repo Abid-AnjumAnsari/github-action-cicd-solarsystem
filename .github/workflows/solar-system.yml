@@ -155,6 +155,9 @@ jobs:
 
   dev-deploy:
     needs: [docker]
+    envirnment:
+      name: development
+      url: https://${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -326,17 +329,6 @@ jobs:
           export KUBECONFIG=/tmp/kubeconfig
           kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete job solar-system-seed || true
 
-  # integration-testing:
-  #   name: Dev Integration Testing
-  #   needs: [run-seeder, dev-deploy]
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Test `/live` Endpoint
-  #       env:
-  #         URL: ${{ needs.dev-deploy.outputs.APP_INGRESS_URL }}
-  #       run: |
-  #         echo "Testing endpoint: https://$URL/live"
-  #         curl https://$URL/live -s -k | jq -r .status | grep -iq live 
   integration-testing:
     name: Dev Integration Testing
     needs: [run-seeder, dev-deploy]
@@ -347,15 +339,5 @@ jobs:
           URL: ${{ needs.dev-deploy.outputs.APP_INGRESS_URL }}
         run: |
           echo "Testing endpoint: https://$URL/live"
-          for i in $(seq 1 10); do
-            RESPONSE=$(curl -s -k https://$URL/live)
-            echo "Attempt $i raw response: $RESPONSE"
-            STATUS=$(echo "$RESPONSE" | jq -r .status 2>/dev/null)
-            if [ "$STATUS" = "live" ]; then
-              echo "App is live."
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "App did not become live in time" >&2
-          exit 1
+          curl https://$URL/live -s -k | jq -r .status | grep -iq live 
+  
