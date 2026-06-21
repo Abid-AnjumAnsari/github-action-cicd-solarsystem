@@ -342,7 +342,7 @@ jobs:
           curl https://$URL/live -s -k | jq -r .status | grep -iq live
 
   prod-deploy:
-    needs: [docker]
+    needs: [dev-integration-testing]
     environment:
       name: production
       url: https://${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
