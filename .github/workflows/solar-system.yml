@@ -337,7 +337,7 @@ jobs:
   #       run: |
   #         echo "Testing endpoint: https://$URL/live"
   #         curl https://$URL/live -s -k | jq -r .status | grep -iq live 
-    integration-testing:
+  integration-testing:
     name: Dev Integration Testing
     needs: [run-seeder, dev-deploy]
     runs-on: ubuntu-latest
