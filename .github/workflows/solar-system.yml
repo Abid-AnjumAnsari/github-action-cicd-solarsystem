@@ -339,8 +339,8 @@ jobs:
           URL: ${{ needs.dev-deploy.outputs.APP_INGRESS_URL }}
         run: |
           echo "Testing endpoint: https://$URL/live"
-          curl https://$URL/live -s -k | jq -r .status | grep -iq live 
-  
+          curl https://$URL/live -s -k | jq -r .status | grep -iq live
+
   prod-deploy:
     needs: [docker]
     environment:
@@ -396,13 +396,37 @@ jobs:
             --from-literal=MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}" \
             --save-config --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy to Dev Environment
+      - name: Deploy to Production Environment
         run: |
           kubectl apply -f kubernetes/production
 
       - name: Set App Ingress Host URL
-  
-      prod-integration-testing:
+        id: set-ingress-host-address
+        run: |
+          # wait up to 60s for ingress to populate
+          for i in $(seq 1 12); do
+            TLS_HOST=$(kubectl -n ${{ vars.NAMESPACE }} get ingress -o jsonpath='{.items[0].spec.tls[0].hosts[0]}' 2>/dev/null || true)
+            RULE_HOST=$(kubectl -n ${{ vars.NAMESPACE }} get ingress -o jsonpath='{.items[0].spec.rules[0].host}' 2>/dev/null || true)
+            if [ -n "$TLS_HOST" ]; then
+              HOST="$TLS_HOST"
+              break
+            elif [ -n "$RULE_HOST" ]; then
+              HOST="$RULE_HOST"
+              break
+            else
+              sleep 5
+            fi
+          done
+          if [ -z "$HOST" ]; then
+            echo "No ingress host found after wait" >&2
+            exit 1
+          fi
+          echo "APP_INGRESS_URL=$HOST" >> "$GITHUB_OUTPUT"
+
+    outputs:
+      APP_INGRESS_URL: ${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
+
+  prod-integration-testing:
     name: Prod Integration Testing
     needs: prod-deploy
     runs-on: ubuntu-latest
@@ -412,4 +436,4 @@ jobs:
           URL: ${{ needs.prod-deploy.outputs.APP_INGRESS_URL }}
         run: |
           echo "Testing endpoint: https://$URL/live"
-          curl https://$URL/live -s -k | jq -r .status | grep -iq live    
+          curl https://$URL/live -s -k | jq -r .status | grep -iq live
