@@ -157,6 +157,11 @@ jobs:
     if: contains(github.ref, 'feature/')
     needs: [docker]
     uses: ./.github/workflows/reuse-deployment.yml
+    secrets:
+      KUBECONFIG: ${{ secrets.KUBECONFIG }}
+        
+      MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
+        
   #   environment:
   #     name: development
   #     url: https://${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
