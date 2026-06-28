@@ -353,6 +353,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: [docker]
     uses: ./.github/workflows/reuse-deployment.yml
+    secrets:
+      KUBECONFIG: ${{ secrets.KUBECONFIG }}
+        
+      MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
     # environment:
     #   name: production
     #   url: https://${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
