@@ -13,6 +13,10 @@ jobs:
     environment:
       name: development
       url: https://${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
+      env:
+      MONGO_URI: 'mongodb+srv://${{ vars.MONGO_USERNAME }}:${{ secrets.MONGO_PASSWORD }}@cluster0.dqmuih9.mongodb.net/test?retryWrites=true&w=majority'
+      MONGO_USERNAME: ${{ vars.MONGO_USERNAME }}
+      MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
