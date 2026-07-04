@@ -1,0 +1,122 @@
+name: Deployment - Reusable workflow
+
+on:
+  workflow_call:
+    secrets:
+      KUBECONFIG:
+        required: true
+      MONGO_PASSWORD:
+        required: true
+    inputs:
+      kubectl-version:
+        description: kubectl CLI version
+        required: false
+        default: v1.26.0
+        type: string
+      k8s-manifest-dir:
+        description: Path to Kubernetes manifests
+        required: true
+        default: kubernetes/
+        type: string
+      environment:
+        description: Deployment environment name
+        required: true
+        default: dev
+        type: string
+    outputs:
+      application-url:
+        description: The URL of the deployed application ingress
+        value: ${{ jobs.reuse-deploy.outputs.APP_INGRESS_URL }}
+jobs:
+  reuse-deploy:
+    
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
+    env:
+      MONGO_URI: 'mongodb+srv://${{ vars.MONGO_USERNAME }}:${{ secrets.MONGO_PASSWORD }}@cluster0.dqmuih9.mongodb.net/test?retryWrites=true&w=majority'
+      MONGO_USERNAME: ${{ vars.MONGO_USERNAME }}
+      MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install kubectl CLI
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ inputs.kubectl-version }}
+
+      - name: Configure kubeconfig context
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Fetch Kubernetes cluster details
+        run: |
+          kubectl version --short
+          echo '---------------------------------'
+          kubectl get nodes
+
+      - name: Save Nginx Ingress IP
+        id: ingress
+        run: |
+          echo "INGRESS_IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.spec.externalIPs[0]}')" >> $GITHUB_ENV
+
+      - name: Replace tokens in manifests
+        uses: cschleiden/replace-tokens@v1
+        with:
+          tokenPrefix: '_{_'
+          tokenSuffix: '_}_'
+          files: ${{ inputs.k8s-manifest-dir }}/*.yaml
+        env:
+          NAMESPACE: ${{ vars.NAMESPACE }}
+          REPLICAS: ${{ vars.REPLICAS }}
+          IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
+          INGRESS_IP: ${{ env.INGRESS_IP }}
+
+      - name: Verify replaced manifests
+        run: cat ${{ inputs.k8s-manifest-dir }}/*.yaml
+
+      - name: Create MongoDB Secret
+        run: |
+          kubectl -n ${{ vars.NAMESPACE }} create secret generic mongo-db-creds \
+            --from-literal=MONGO_URI="${{ env.MONGO_URI }}" \
+            --from-literal=MONGO_USERNAME="${{ env.MONGO_USERNAME }}" \
+            --from-literal=MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}" \
+            --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to Environment
+        run: |
+           kubectl apply -f ${{ inputs.k8s-manifest-dir }}/deployment.yaml
+           kubectl apply -f ${{ inputs.k8s-manifest-dir }}/service.yaml
+           kubectl apply -f ${{ inputs.k8s-manifest-dir }}/ingress.yaml
+
+      - name: Set App Ingress Host URL
+        id: set-ingress-host-address
+        run: |
+          # wait up to 60s for ingress to populate
+          for i in $(seq 1 12); do
+            TLS_HOST=$(kubectl -n ${{ vars.NAMESPACE }} get ingress -o jsonpath='{.items[0].spec.tls[0].hosts[0]}' 2>/dev/null || true)
+            RULE_HOST=$(kubectl -n ${{ vars.NAMESPACE }} get ingress -o jsonpath='{.items[0].spec.rules[0].host}' 2>/dev/null || true)
+            if [ -n "$TLS_HOST" ]; then
+              HOST="$TLS_HOST"
+              break
+            elif [ -n "$RULE_HOST" ]; then
+              HOST="$RULE_HOST"
+              break
+            else
+              sleep 5
+            fi
+          done
+          if [ -z "$HOST" ]; then
+            echo "No ingress host found after wait" >&2
+            exit 1
+          fi
+          echo "APP_INGRESS_URL=$HOST" >> "$GITHUB_OUTPUT"
+
+    outputs:
+      APP_INGRESS_URL: ${{ steps.set-ingress-host-address.outputs.APP_INGRESS_URL }}
+
+  
