@@ -23,6 +23,10 @@ on:
         required: true
         default: dev
         type: string
+    outputs:
+      application-url:
+        description: The URL of the deployed application ingress
+        value: ${{ jobs.reuse-deploy.outputs.APP_INGRESS_URL }}
 jobs:
   reuse-deploy:
     
