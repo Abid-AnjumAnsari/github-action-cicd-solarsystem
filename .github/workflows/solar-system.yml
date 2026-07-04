@@ -157,9 +157,12 @@ jobs:
     if: contains(github.ref, 'feature/')
     needs: [docker]
     uses: ./.github/workflows/reuse-deployment.yml
+    with:
+      kubectl-version: v1.27.0        # optional override
+      environment: development
+      k8s-manifest-dir: kubernetes/development   # no trailing slash
     secrets:
-      KUBECONFIG: ${{ secrets.KUBECONFIG }}
-        
+      KUBECONFIG: ${{ secrets.KUBECONFIG }}   
       MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
         
   #   environment:
@@ -353,6 +356,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: [docker]
     uses: ./.github/workflows/reuse-deployment.yml
+    with:
+      kubectl-version: v1.27.0        # optional override
+      environment: production
+      k8s-manifest-dir: kubernetes/production   # no trailing slash
     secrets:
       KUBECONFIG: ${{ secrets.KUBECONFIG }}
         
