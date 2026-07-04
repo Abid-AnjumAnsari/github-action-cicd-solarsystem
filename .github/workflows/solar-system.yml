@@ -347,7 +347,7 @@ jobs:
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_CHANNEL: github-actions-channel
+          SLACK_CHANNEL: 'github-actions-channel'
           SLACK_COLOR: ${{ job.status }}
           SLACK_ICON: https://gitlab.com/sidd-harth/solar-system/-/raw/main/images/saturn.png
           SLACK_MESSAGE: ":hammer_and_wrench: Triggered by ${{ github.actor }}"
