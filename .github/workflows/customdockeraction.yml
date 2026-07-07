@@ -1,0 +1,17 @@
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  test-giphy-action:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Invoke Giphy PR Comment Action
+        uses: abid-anjumansari/docker-action-pr-giffy-comment@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          giphy-api-key: ${{ secrets.GIPHY_API_KEY }}
